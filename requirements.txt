@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-multipart
+google-generativeai
+python-dotenv
+
+# frist activate : = .venv\Scripts\activate
+# to the the backend  command  = uvicorn app:app --reload --port 8000
