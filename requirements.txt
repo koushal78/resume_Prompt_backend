@@ -1,5 +1,9 @@
+
+
+uvicorn[standard]
+gunicorn
 fastapi
-uvicorn
+
 python-multipart
 google-generativeai
 python-dotenv
