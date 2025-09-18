@@ -7,6 +7,7 @@ fastapi
 python-multipart
 google-generativeai
 python-dotenv
+cloudinary
 
 # frist activate : = .venv\Scripts\activate
 # to the the backend  command  = uvicorn app:app --reload --port 8000

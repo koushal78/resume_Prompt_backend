@@ -1,10 +1,14 @@
 import os
 import tempfile
 import json
+from io import BytesIO
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import google.generativeai as genai
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
 
 # Load env + configure Gemini
 load_dotenv()
@@ -12,6 +16,22 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     raise RuntimeError("GEMINI_API_KEY missing in .env")
 genai.configure(api_key=API_KEY)
+
+# Configure Cloudinary
+CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUD_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUD_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+if not (CLOUD_NAME and CLOUD_KEY and CLOUD_SECRET):
+    raise RuntimeError(
+        "Cloudinary credentials missing in .env (CLOUDINARY_CLOUD_NAME/KEY/SECRET)."
+    )
+
+
+cloudinary.config(
+    cloud_name=CLOUD_NAME,
+    api_key=CLOUD_KEY,
+    api_secret=CLOUD_SECRET,
+)
 
 # Choose a model (flash is fast & free-tier friendly)
 MODEL_NAME = "gemini-1.5-flash"
@@ -21,11 +41,13 @@ app = FastAPI(title="Resume Analyzer (Gemini + Files)")
 # Allow your frontend to call this API (adjust origin if you want)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # or ["http://localhost:3000"]
-    allow_credentials=False,
+    allow_origins=["http://localhost:5173"],   # change to your frontend origin(s)
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB - adjust if needed
 
 @app.post("/analyze")
 async def analyze_resume(
@@ -43,17 +65,48 @@ async def analyze_resume(
     if file.content_type not in allowed:
         raise HTTPException(status_code=415, detail="Only PDF/DOC/DOCX are supported")
 
-    # Save upload to a temporary file
+    # Read full bytes (small resume files are ok) and enforce size limit
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large")
+
+    # Save upload to a temporary file (so genai.upload_file(path=...) keeps working)
     suffix = os.path.splitext(file.filename or "")[1] or ".bin"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await file.read())
+        tmp.write(contents)
         temp_path = tmp.name
 
     try:
-        # Upload file to Gemini
+        # ===== Upload to Cloudinary (so you get preview URL and hosted PDF) =====
+        try:
+            # Upload local file to Cloudinary. resource_type="auto" will accept PDFs.
+            cloud_result = cloudinary.uploader.upload(
+                temp_path,
+                resource_type="auto",
+                folder="resumes",
+            )
+            pdf_url = cloud_result.get("secure_url")
+            public_id = cloud_result.get("public_id")
+
+            # Build preview image (page=1 -> first page PNG)
+            preview_url, _ = cloudinary_url(
+                public_id,
+                format="png",
+                page=1,
+                width=900,
+                crop="scale",
+            )
+        except Exception as ce:
+            # If Cloudinary fails, continue but include a helpful field
+            pdf_url = None
+            preview_url = None
+            # Log or raise depending on whether Cloudinary is required
+            print("Cloudinary upload failed:", str(ce))
+
+        # ===== Upload file to Gemini (your existing flow) =====
         uploaded = genai.upload_file(path=temp_path, display_name=file.filename)
 
-        # Build your prompt (corrected version)
+        # Build your prompt (kept your original prompt structure)
         prompt = f"""
 interface_Feedback {{
   overallScore: number; //max 100
@@ -125,7 +178,8 @@ Do not include any other text or comments."""
             # If the model returns non-JSON, send raw text so you can debug
             feedback = {"raw": text}
 
-        return {"feedback": feedback }
+        # Return feedback + cloudinary urls (if available)
+        return {"feedback": feedback, "pdf_url": pdf_url, "preview_url": preview_url}
 
     finally:
         # Clean up temp file
