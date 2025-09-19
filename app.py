@@ -10,6 +10,7 @@ import cloudinary
 import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
 
+
 # Load env + configure Gemini
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -41,8 +42,8 @@ app = FastAPI(title="Resume Analyzer (Gemini + Files)")
 # Allow your frontend to call this API (adjust origin if you want)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],   # change to your frontend origin(s)
-    allow_credentials=True,
+    allow_origins=["*"],   # change to your frontend origin(s)
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
