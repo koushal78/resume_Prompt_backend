@@ -42,7 +42,10 @@ app = FastAPI(title="Resume Analyzer (Gemini + Files)")
 # Allow your frontend to call this API (adjust origin if you want)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # change to your frontend origin(s)
+    allow_origins=[
+        "https://resume-analyser-frontend-orqc.onrender.com",
+        "http://localhost:5173",
+    ],  
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
