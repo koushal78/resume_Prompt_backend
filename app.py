@@ -35,7 +35,7 @@ cloudinary.config(
 )
 
 # Choose a model (flash is fast & free-tier friendly)
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 app = FastAPI(title="Resume Analyzer (Gemini + Files)")
 
